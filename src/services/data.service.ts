@@ -1,5 +1,10 @@
 import pool from "../db";
-import { UploadDataResponseModel } from "src/models/data.response";
+import {
+    UploadDataResponseModel,
+    FetchDataResponseModel,
+    UserData,
+} from "src/models/data.response";
+import { RedisService } from "./redis.service";
 
 const uploadCsv = async (
     csvBuffer: Buffer,
@@ -75,6 +80,87 @@ const uploadCsv = async (
     return { success: true };
 };
 
+const fetchData = async (
+    page: number = 1,
+    limit: number = 10,
+): Promise<FetchDataResponseModel> => {
+    const offset = (page - 1) * limit;
+    const cacheKey = `users:page:${page}:limit:${limit}`;
+
+    // Try to get from cache first
+    try {
+        const isRedisConnected = await RedisService.isConnected();
+        console.log("isRedisConnected: ", isRedisConnected);
+        if (isRedisConnected) {
+            const cachedData = await RedisService.get(cacheKey);
+            console.log("cachedData: ", cachedData);
+            if (cachedData) {
+                const parsedData = JSON.parse(cachedData);
+                return { ...parsedData, cached: true };
+            }
+        }
+    } catch (error) {
+        console.warn(
+            "Cache retrieval failed, falling back to database:",
+            error,
+        );
+    }
+
+    // Fallback to database
+    const client = await pool.connect();
+    try {
+        // Get total count
+        const countResult = await client.query(
+            "SELECT COUNT(*) as total FROM users",
+        );
+        const total = parseInt(countResult.rows[0].total);
+
+        // Get paginated data
+        const query = `
+            SELECT id, name, email, city
+            FROM users
+            ORDER BY id
+            LIMIT $1 OFFSET $2
+        `;
+        const result = await client.query(query, [limit, offset]);
+
+        const data: UserData[] = result.rows;
+        const totalPages = Math.ceil(total / limit);
+
+        const response: FetchDataResponseModel = {
+            data,
+            metadata: {
+                page,
+                limit,
+                total,
+                totalPages,
+            },
+            cached: false,
+        };
+
+        // Try to cache the result
+        try {
+            const isRedisConnected = await RedisService.isConnected();
+            console.log("isRedisConnected", isRedisConnected)
+            if (isRedisConnected) {
+                const res = await RedisService.set(
+                    cacheKey,
+                    JSON.stringify(response),
+                    300,
+                ); // Cache for 5 minutes
+                console.log("Cache set result: ", res);
+            }
+        } catch (error) {
+            console.warn("Cache storage failed:", error);
+        }
+
+        return response;
+    } finally {
+        client.release();
+    }
+};
+
 export const DataService = {
     uploadCsv,
+    fetchData,
 };

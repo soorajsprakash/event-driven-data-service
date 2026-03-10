@@ -7,5 +7,6 @@ const upload = multer({ storage: multer.memoryStorage() });
 const router = express.Router();
 
 router.post("/", upload.single("file"), DataApi.uploadDataFile);
+router.get("/", DataApi.fetchDataFile);
 
 export default router;
