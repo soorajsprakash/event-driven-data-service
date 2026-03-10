@@ -1,0 +1,42 @@
+version: "3.9"
+
+services:
+    postgres:
+        image: postgres:15-alpine
+        restart: unless-stopped
+        environment:
+            - POSTGRES_USER=${POSTGRES_USER:-user}
+            - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+            - POSTGRES_DB=${POSTGRES_DB:-is-assignment}
+        volumes:
+            - pgdata:/var/lib/postgresql/data
+        ports:
+            - "5432:5432"
+
+    redis:
+        image: redis:7-alpine
+        restart: unless-stopped
+        ports:
+            - "6379:6379"
+
+    zookeeper:
+        image: wurstmeister/zookeeper:3.4.6
+        ports:
+            - "2181:2181"
+
+    kafka:
+        image: wurstmeister/kafka:2.13-2.8.1
+        restart: unless-stopped
+        environment:
+            KAFKA_BROKER_ID: 1
+            KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+            KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+            KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+            KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+        ports:
+            - "9092:9092"
+        depends_on:
+            - zookeeper
+
+volumes:
+    pgdata:

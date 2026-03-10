@@ -10,7 +10,7 @@ console.log("REDIS_URL from env:", process.env.REDIS_URL);
 
 const kafka = new Kafka({
     clientId: "is-assignment-app",
-    brokers: process.env.KAFKA_BROKERS?.split(","),
+    brokers: (process.env.KAFKA_BROKERS || "kafka:9092").split(","),
     logLevel: logLevel.ERROR,
     requestTimeout: 30000,
     connectionTimeout: 30000,
