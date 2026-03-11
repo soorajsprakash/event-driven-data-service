@@ -7,13 +7,14 @@
     "type": "commonjs",
     "main": "index.js",
     "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1",
+        "test": "jest --detectOpenHandles",
+        "test:watch": "jest --watch --detectOpenHandles",
+        "test:coverage": "jest --coverage --detectOpenHandlesf",
         "start": "ts-node -r dotenv/config src/app.ts",
         "consumer": "ts-node -r dotenv/config src/kafka-consumer.ts",
         "build": "tsc"
     },
     "dependencies": {
-        "@types/multer": "^2.1.0",
         "dotenv": "^16.6.1",
         "express": "^5.2.1",
         "kafkajs": "^2.2.4",
@@ -23,8 +24,12 @@
     },
     "devDependencies": {
         "@types/express": "^5.0.6",
+        "@types/jest": "^30.0.0",
+        "@types/multer": "^2.1.0",
         "@types/node": "^25.4.0",
         "@types/pg": "^8.18.0",
+        "jest": "^30.3.0",
+        "ts-jest": "^29.4.6",
         "ts-node": "^10.9.2",
         "typescript": "^5.9.3"
     }
