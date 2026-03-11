@@ -9,6 +9,21 @@ export interface UserData {
     city: string;
 }
 
+export interface UserEvent {
+    data: Array<{
+        name: string;
+        email: string;
+        city: string;
+    }>;
+    timestamp: string;
+}
+
+export type UserRow = {
+    name: string;
+    email: string;
+    city: string;
+};
+
 export interface FetchDataResponseModel {
     data: UserData[];
     metadata: {

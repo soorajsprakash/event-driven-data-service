@@ -6,10 +6,24 @@ import {
 } from "src/models/data.response";
 import { RedisService } from "./redis.service";
 import { KafkaService } from "./kafka.service";
+import crypto from "crypto";
+
 
 const kafkaTopic = process.env.KAFKA_TOPIC;
 
 const uploadCsv = async (csvBuffer: Buffer): Promise<UploadDataResponseModel> => {
+    const fileHash = crypto
+        .createHash("sha256")
+        .update(csvBuffer)
+        .digest("hex");
+    const isFileProcessed = await RedisService.get(`file:${fileHash}`);
+    if (isFileProcessed) {
+        console.log(
+            "Skipping file processing as it was already processed before (hash match)",
+        );
+        return { success: true };
+    }
+
     const text = csvBuffer.toString("utf8");
     const lines = text
         .split(/\r?\n/)
@@ -78,45 +92,51 @@ const uploadCsv = async (csvBuffer: Buffer): Promise<UploadDataResponseModel> =>
         client.release();
     }
 
-    // Publish a single kafka event with the last 1k rows
-    // const kafkaRows = validRows.slice(-1000);
-    try {
-        const kafkaMessages = validRows.map((row) => ({
-            key: row.email,
-            value: JSON.stringify({
-                event: "USER_UPLOADED",
-                timestamp: new Date().toISOString(),
-                data: row,
-            }),
-        }));
+    // Publish a single kafka event with the last 500 rows, which would ideally should be in the cache.
+    for (let i = 0; i < validRows.length; i += 500) {
+        const chunk = validRows.slice(i, i + 500);
 
-        await KafkaService.publishEvent(kafkaTopic, kafkaMessages);
-        console.log(`Published ${validRows.length} user events to Kafka`);
-    } catch (kafkaError) {
-        console.error("Failed to publish Kafka events:", kafkaError);
-        // Don't fail the upload just because Kafka publish failed
+        const kafkaMessages = [
+            {
+                key: "DATA_UPLOADED",
+                value: JSON.stringify({
+                    data: chunk,
+                    timestamp: new Date().toISOString(),
+                }),
+            },
+        ];
+        try {
+            await KafkaService.publishEvent(kafkaTopic, kafkaMessages);
+            console.log(
+                `Published an event with ${chunk.length} user events to Kafka`,
+            );
+        } catch (error) {
+            console.warn("Kafka publish failed for chunk:", error);
+        }
     }
 
+    // save file hash in redis with ttl of 5 days to prevent re-processing the same file
+    await RedisService.set(`file:${fileHash}`, "uploaded", 5 * 24 * 60 * 60);
     return { success: true };
-};;;
+};;
 
 const fetchData = async (
     page: number = 1,
-    limit: number = 10,
+    pageSize: number = 10,
 ): Promise<FetchDataResponseModel> => {
-    const offset = (page - 1) * limit;
-    const cacheKey = `users:page:${page}:limit:${limit}`;
+    const cacheKey = "all_users";
 
-    // Try to get from cache first
+    let users: UserData[] | null = null;
+    let servedFromCache = false;
+
     try {
         const isRedisConnected = await RedisService.isConnected();
-        console.log("isRedisConnected: ", isRedisConnected);
         if (isRedisConnected) {
             const cachedData = await RedisService.get(cacheKey);
-            console.log("cachedData: ", cachedData);
             if (cachedData) {
-                const parsedData = JSON.parse(cachedData);
-                return { ...parsedData, cached: true };
+                const parsed = JSON.parse(cachedData) as UserData[];
+                users = Array.isArray(parsed) ? parsed : [];
+                servedFromCache = users.length > 0 ? true : false;
             }
         }
     } catch (error) {
@@ -126,58 +146,51 @@ const fetchData = async (
         );
     }
 
-    // Fallback to database
-    const client = await pool.connect();
-    try {
-        // Get total count
-        const countResult = await client.query(
-            "SELECT COUNT(*) as total FROM users",
-        );
-        const total = parseInt(countResult.rows[0].total);
-
-        // Get paginated data
-        const query = `
-            SELECT id, name, email, city
-            FROM users
-            ORDER BY id
-            LIMIT $1 OFFSET $2
-        `;
-        const result = await client.query(query, [limit, offset]);
-
-        const data: UserData[] = result.rows;
-        const totalPages = Math.ceil(total / limit);
-
-        const response: FetchDataResponseModel = {
-            data,
-            metadata: {
-                page,
-                limit,
-                total,
-                totalPages,
-            },
-            cached: false,
-        };
-
-        // Try to cache the result
+    if (!users || users.length === 0) {
+        const client = await pool.connect();
         try {
-            const isRedisConnected = await RedisService.isConnected();
-            console.log("isRedisConnected", isRedisConnected)
-            if (isRedisConnected) {
-                const res = await RedisService.set(
-                    cacheKey,
-                    JSON.stringify(response),
-                    300,
-                ); // Cache for 5 minutes
-                console.log("Cache set result: ", res);
-            }
-        } catch (error) {
-            console.warn("Cache storage failed:", error);
-        }
+            const query = `
+                SELECT id, name, email, city
+                FROM users
+                ORDER BY id
+            `;
+            const result = await client.query(query);
+            users = result.rows;
 
-        return response;
-    } finally {
-        client.release();
+            // set cache
+            const isRedisConnected = await RedisService.isConnected();
+            if (isRedisConnected) {
+                console.log(
+                    "Setting cache for all users with",
+                    users.length,
+                    "entries",
+                );
+                await RedisService.set(
+                    cacheKey,
+                    JSON.stringify(users),
+                    60 * 60,
+                );
+            }
+        } finally {
+            client.release();
+        }
     }
+
+    const total = users.length;
+    const totalPages = Math.ceil(total / pageSize);
+    const start = Math.max(0, (page - 1) * pageSize);
+    const end = start + pageSize;
+
+    return {
+        data: users.slice(start, end),
+        metadata: {
+            page,
+            limit: pageSize,
+            total,
+            totalPages,
+        },
+        cached: servedFromCache,
+    };
 };
 
 export const DataService = {

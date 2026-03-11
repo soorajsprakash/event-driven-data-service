@@ -4,9 +4,6 @@ let producer: Producer | null = null;
 let consumer: Consumer | null = null;
 
 console.log("Initializing KafkaService...");
-console.log("Kafka brokers from env:", process.env.KAFKA_BROKERS);
-console.log("DATABASE_URL from env:", process.env.DATABASE_URL);
-console.log("REDIS_URL from env:", process.env.REDIS_URL);
 
 const kafka = new Kafka({
     clientId: "is-assignment-app",

@@ -33,14 +33,14 @@ describe("Kafka Consumer", () => {
             // The processUserEvent function is not exported, so we test via integration
             const messageBuffer = Buffer.from(
                 JSON.stringify({
-                    event: "USER_UPLOADED",
+                    event: "DATA_UPLOADED",
                     timestamp: "2026-03-11T10:00:00Z",
                     data: {
                         name: "John Doe",
                         email: "john@test.com",
                         city: "NYC",
                     },
-                })
+                }),
             );
 
             // Mock successful database query
@@ -53,21 +53,21 @@ describe("Kafka Consumer", () => {
             // Since processUserEvent is not exported, we test via integration
             // For now, we'll create a test that validates the expected behavior
             const userEvent = JSON.parse(messageBuffer.toString());
-            expect(userEvent.event).toBe("USER_UPLOADED");
+            expect(userEvent.event).toBe("DATA_UPLOADED");
             expect(userEvent.data.email).toBe("john@test.com");
         });
 
         it("should skip duplicate messages", async () => {
             const messageBuffer = Buffer.from(
                 JSON.stringify({
-                    event: "USER_UPLOADED",
+                    event: "DATA_UPLOADED",
                     timestamp: "2026-03-11T10:00:00Z",
                     data: {
                         name: "Jane Doe",
                         email: "jane@test.com",
                         city: "LA",
                     },
-                })
+                }),
             );
 
             const userEvent = JSON.parse(messageBuffer.toString());
@@ -98,14 +98,22 @@ describe("Kafka Consumer", () => {
             mockRedisService.set = jest.fn().mockResolvedValue("OK");
 
             const cacheKey = "user:john@test.com";
-            const userData = { name: "John Doe", email: "john@test.com", city: "NYC" };
+            const userData = {
+                name: "John Doe",
+                email: "john@test.com",
+                city: "NYC",
+            };
 
-            await mockRedisService.set(cacheKey, JSON.stringify(userData), 3600);
+            await mockRedisService.set(
+                cacheKey,
+                JSON.stringify(userData),
+                3600,
+            );
 
             expect(mockRedisService.set).toHaveBeenCalledWith(
                 cacheKey,
                 JSON.stringify(userData),
-                3600
+                3600,
             );
         });
 
@@ -127,7 +135,7 @@ describe("Kafka Consumer", () => {
                         email: "john@test.com",
                         city: "NYC",
                     },
-                })
+                }),
             );
 
             const userEvent = JSON.parse(messageBuffer.toString());
@@ -135,20 +143,30 @@ describe("Kafka Consumer", () => {
         });
 
         it("should handle database errors gracefully", async () => {
-            mockPool.query = jest.fn().mockRejectedValue(new Error("Database error"));
+            mockPool.query = jest
+                .fn()
+                .mockRejectedValue(new Error("Database error"));
 
-            await expect(mockPool.query("SELECT * FROM users")).rejects.toThrow("Database error");
+            await expect(mockPool.query("SELECT * FROM users")).rejects.toThrow(
+                "Database error",
+            );
             expect(mockPool.query).toHaveBeenCalled();
         });
 
         it("should handle Redis caching failures gracefully", async () => {
-            mockRedisService.set = jest.fn().mockRejectedValue(new Error("Redis connection failed"));
+            mockRedisService.set = jest
+                .fn()
+                .mockRejectedValue(new Error("Redis connection failed"));
 
             const cacheKey = "user:john@test.com";
-            const userData = { name: "John Doe", email: "john@test.com", city: "NYC" };
+            const userData = {
+                name: "John Doe",
+                email: "john@test.com",
+                city: "NYC",
+            };
 
             await expect(
-                mockRedisService.set(cacheKey, JSON.stringify(userData), 3600)
+                mockRedisService.set(cacheKey, JSON.stringify(userData), 3600),
             ).rejects.toThrow("Redis connection failed");
         });
     });
@@ -242,7 +260,10 @@ describe("Kafka Consumer", () => {
             // Simulate cleanup logic: keep only last 1000
             const excessSize = messages.size - processedMessagesLimit;
             if (excessSize > 0) {
-                const keysToDelete = Array.from(messages.keys()).slice(0, excessSize);
+                const keysToDelete = Array.from(messages.keys()).slice(
+                    0,
+                    excessSize,
+                );
                 keysToDelete.forEach((key) => messages.delete(key));
             }
 
@@ -254,14 +275,14 @@ describe("Kafka Consumer", () => {
         it("should extract correct user email from event data", async () => {
             const messageBuffer = Buffer.from(
                 JSON.stringify({
-                    event: "USER_UPLOADED",
+                    event: "DATA_UPLOADED",
                     timestamp: "2026-03-11T10:00:00Z",
                     data: {
                         name: "John Doe",
                         email: "john.doe@example.com",
                         city: "New York",
                     },
-                })
+                }),
             );
 
             const userEvent = JSON.parse(messageBuffer.toString());
@@ -271,14 +292,14 @@ describe("Kafka Consumer", () => {
         it("should validate required user data fields", async () => {
             const messageBuffer = Buffer.from(
                 JSON.stringify({
-                    event: "USER_UPLOADED",
+                    event: "DATA_UPLOADED",
                     timestamp: "2026-03-11T10:00:00Z",
                     data: {
                         name: "John Doe",
                         email: "john@test.com",
                         city: "NYC",
                     },
-                })
+                }),
             );
 
             const userEvent = JSON.parse(messageBuffer.toString());

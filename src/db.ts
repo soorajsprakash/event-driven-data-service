@@ -8,19 +8,5 @@ const pool = new Pool({
     max: 5,
 });
 
-// (async () => {
-//     try {
-//         await pool.query(`
-//             CREATE TABLE IF NOT EXISTS users (
-//                 id SERIAL PRIMARY KEY,
-//                 name text NOT NULL,
-//                 email text NOT NULL UNIQUE,
-//                 city text
-//             );
-//         `);
-//     } catch (err) {
-//         console.error("failed to ensure users table exists", err);
-//     }
-// })();
 
 export default pool;
