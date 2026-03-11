@@ -7,7 +7,7 @@ console.log("Initializing KafkaService...");
 
 const kafka = new Kafka({
     clientId: "is-assignment-app",
-    brokers: (process.env.KAFKA_BROKERS || "kafka:9092").split(","),
+    brokers: (`${process.env.KAFKA_BROKERS_HOST}:${process.env.KAFKA_PORT}`).split(","),
     logLevel: logLevel.ERROR,
     requestTimeout: 30000,
     connectionTimeout: 30000,

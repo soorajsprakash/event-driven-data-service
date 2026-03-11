@@ -4,42 +4,31 @@ services:
         image: postgres:15-alpine
         restart: unless-stopped
         environment:
-            - POSTGRES_USER=${POSTGRES_USER:-user}
-            - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
-            - POSTGRES_DB=${POSTGRES_DB:-is-assignment}
+            - PG_USER=${PG_USER:-user}
+            - PG_PASSWORD=${PG_PASSWORD:-password}
+            - PG_DB=${PG_DB:-is-assignment}
         volumes:
             - pgdata:/var/lib/postgresql/data
         ports:
-            - "5432:5432"
+            - "${PG_PORT:-5433}:5432"
 
     redis:
         image: redis:7-alpine
         restart: unless-stopped
         ports:
-            - "6379:6379"
-
-    zookeeper:
-        image: bitnamilegacy/zookeeper:3.9.3-debian-12-r22
-        restart: unless-stopped
-        environment:
-            - ALLOW_ANONYMOUS_LOGIN=yes
-        ports:
-            - "2181:2181"
+            - "${REDIS_PORT:-6380}:6379"
 
     kafka:
         image: bitnamilegacy/kafka:3.3.2
         restart: unless-stopped
         environment:
             - KAFKA_BROKER_ID=1
-            - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
             - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092
-            - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+            - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:${KAFKA_PORT},PLAINTEXT_INTERNAL://kafka:9092
             - KAFKA_ALLOW_PLAINTEXT_LISTENER=yes
             - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
         ports:
-            - "9092:9092"
-        depends_on:
-            - zookeeper
+            - "${KAFKA_PORT}:9092"
 
 volumes:
     pgdata:
