@@ -71,7 +71,14 @@ async function processUserEvent(
         );
         const mergedUsers = [...dedupedIncoming, ...filteredExisting];
 
-        await RedisService.set(cacheKey, JSON.stringify(mergedUsers), 3600);
+        if (mergedUsers.length > 0) {
+            console.log("Updating cache with new data");
+            await RedisService.set(
+                cacheKey,
+                JSON.stringify(mergedUsers),
+                60 * 60,
+            );
+        }
 
         processedMessages.set(messageId, messageId);
 

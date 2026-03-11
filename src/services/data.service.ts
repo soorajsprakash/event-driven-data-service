@@ -159,7 +159,7 @@ const fetchData = async (
 
             // set cache
             const isRedisConnected = await RedisService.isConnected();
-            if (isRedisConnected) {
+            if (isRedisConnected && users.length > 0) {
                 console.log(
                     "Setting cache for all users with",
                     users.length,
