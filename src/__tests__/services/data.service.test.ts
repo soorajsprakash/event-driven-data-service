@@ -38,12 +38,12 @@ describe("DataService", () => {
             expect(result.success).toBe(true);
             expect(mockClient.query).toHaveBeenCalled();
             expect(mockKafkaService.publishEvent).toHaveBeenCalledWith(
-                "user-events",
+                process.env.KAFKA_TOPIC!,
                 expect.arrayContaining([
                     expect.objectContaining({
                         key: "john@test.com",
                     }),
-                ])
+                ]),
             );
             expect(mockClient.release).toHaveBeenCalled();
         });

@@ -154,19 +154,26 @@ describe("Kafka Consumer", () => {
     });
 
     describe("Kafka Consumer Integration", () => {
-        it("should subscribe to user-events topic", async () => {
-            mockKafkaService.subscribeToTopic = jest.fn().mockResolvedValue(undefined);
+        it("should subscribe to consumer topic", async () => {
+            mockKafkaService.subscribeToTopic = jest
+                .fn()
+                .mockResolvedValue(undefined);
 
-            await mockKafkaService.subscribeToTopic("user-events", jest.fn());
+            await mockKafkaService.subscribeToTopic(
+                process.env.KAFKA_TOPIC!,
+                jest.fn(),
+            );
 
             expect(mockKafkaService.subscribeToTopic).toHaveBeenCalledWith(
-                "user-events",
-                expect.any(Function)
+                process.env.KAFKA_TOPIC!,
+                expect.any(Function),
             );
         });
 
         it("should disconnect Kafka service on graceful shutdown", async () => {
-            mockKafkaService.disconnect = jest.fn().mockResolvedValue(undefined);
+            mockKafkaService.disconnect = jest
+                .fn()
+                .mockResolvedValue(undefined);
 
             await mockKafkaService.disconnect();
 
@@ -179,29 +186,44 @@ describe("Kafka Consumer", () => {
                 .mockRejectedValue(new Error("Failed to subscribe to topic"));
 
             await expect(
-                mockKafkaService.subscribeToTopic("user-events", jest.fn())
+                mockKafkaService.subscribeToTopic(
+                    process.env.KAFKA_TOPIC!,
+                    jest.fn(),
+                ),
             ).rejects.toThrow("Failed to subscribe to topic");
         });
 
         it("should process messages in correct order with auto-commit", async () => {
             const messageHandler = jest.fn();
-            mockKafkaService.subscribeToTopic = jest.fn().mockResolvedValue(undefined);
+            mockKafkaService.subscribeToTopic = jest
+                .fn()
+                .mockResolvedValue(undefined);
 
-            await mockKafkaService.subscribeToTopic("user-events", messageHandler);
+            await mockKafkaService.subscribeToTopic(
+                process.env.KAFKA_TOPIC!,
+                messageHandler,
+            );
 
             // Simulate processing would happen in subscribeToTopic
             expect(mockKafkaService.subscribeToTopic).toHaveBeenCalled();
         });
 
         it("should handle message processing errors", async () => {
-            const messageHandler = jest.fn().mockRejectedValue(new Error("Processing failed"));
-            mockKafkaService.subscribeToTopic = jest.fn().mockResolvedValue(undefined);
+            const messageHandler = jest
+                .fn()
+                .mockRejectedValue(new Error("Processing failed"));
+            mockKafkaService.subscribeToTopic = jest
+                .fn()
+                .mockResolvedValue(undefined);
 
-            await mockKafkaService.subscribeToTopic("user-events", messageHandler);
+            await mockKafkaService.subscribeToTopic(
+                process.env.KAFKA_TOPIC!,
+                messageHandler,
+            );
 
             expect(mockKafkaService.subscribeToTopic).toHaveBeenCalledWith(
-                "user-events",
-                messageHandler
+                process.env.KAFKA_TOPIC!,
+                messageHandler,
             );
         });
     });

@@ -7,6 +7,8 @@ import {
 import { RedisService } from "./redis.service";
 import { KafkaService } from "./kafka.service";
 
+const kafkaTopic = process.env.KAFKA_TOPIC;
+
 const uploadCsv = async (csvBuffer: Buffer): Promise<UploadDataResponseModel> => {
     const text = csvBuffer.toString("utf8");
     const lines = text
@@ -76,7 +78,8 @@ const uploadCsv = async (csvBuffer: Buffer): Promise<UploadDataResponseModel> =>
         client.release();
     }
 
-    // Publish Kafka events for each user record
+    // Publish a single kafka event with the last 1k rows
+    // const kafkaRows = validRows.slice(-1000);
     try {
         const kafkaMessages = validRows.map((row) => ({
             key: row.email,
@@ -87,7 +90,7 @@ const uploadCsv = async (csvBuffer: Buffer): Promise<UploadDataResponseModel> =>
             }),
         }));
 
-        await KafkaService.publishEvent("user-events", kafkaMessages);
+        await KafkaService.publishEvent(kafkaTopic, kafkaMessages);
         console.log(`Published ${validRows.length} user events to Kafka`);
     } catch (kafkaError) {
         console.error("Failed to publish Kafka events:", kafkaError);
@@ -95,7 +98,7 @@ const uploadCsv = async (csvBuffer: Buffer): Promise<UploadDataResponseModel> =>
     }
 
     return { success: true };
-};;
+};;;
 
 const fetchData = async (
     page: number = 1,

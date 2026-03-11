@@ -3,7 +3,7 @@ import { KafkaService } from "./services/kafka.service";
 import { RedisService } from "./services/redis.service";
 import pool from "./db";
 
-const TOPIC = "user-events";
+const TOPIC = process.env.KAFKA_TOPIC;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // ms
 
