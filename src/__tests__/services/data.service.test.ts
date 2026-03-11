@@ -17,12 +17,16 @@ const mockKafkaService = KafkaService as jest.Mocked<typeof KafkaService>;
 describe("DataService", () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        mockRedisService.get = jest.fn().mockResolvedValue(null);
+        mockRedisService.set = jest.fn().mockResolvedValue("OK");
+        mockRedisService.isConnected = jest.fn().mockResolvedValue(false);
+        mockKafkaService.publishEvent = jest.fn().mockResolvedValue(undefined);
     });
 
     describe("uploadCsv", () => {
         it("should successfully parse and upload CSV data", async () => {
             const csvBuffer = Buffer.from(
-                "name,email,city\nJohn Doe,john@test.com,NYC\nJane Smith,jane@test.com,LA"
+                "name,email,city\nJohn Doe,john@test.com,NYC\nJane Smith,jane@test.com,LA",
             );
 
             const mockClient = {
@@ -31,7 +35,9 @@ describe("DataService", () => {
             };
 
             (pool.connect as jest.Mock).mockResolvedValue(mockClient);
-            mockKafkaService.publishEvent = jest.fn().mockResolvedValue(undefined);
+            mockKafkaService.publishEvent = jest
+                .fn()
+                .mockResolvedValue(undefined);
 
             const result = await DataService.uploadCsv(csvBuffer);
 
@@ -41,11 +47,53 @@ describe("DataService", () => {
                 process.env.KAFKA_TOPIC!,
                 expect.arrayContaining([
                     expect.objectContaining({
-                        key: "john@test.com",
+                        key: "DATA_UPLOADED",
                     }),
                 ]),
             );
             expect(mockClient.release).toHaveBeenCalled();
+        });
+
+        it("should send Kafka events in chunks of 500 rows", async () => {
+            const rows = Array.from(
+                { length: 501 },
+                (_, i) => `User ${i + 1},user${i + 1}@test.com,City`,
+            ).join("\n");
+            const csvBuffer = Buffer.from(`name,email,city\n${rows}`);
+
+            const mockClient = {
+                query: jest.fn().mockResolvedValue({ rows: [] }),
+                release: jest.fn(),
+            };
+
+            (pool.connect as jest.Mock).mockResolvedValue(mockClient);
+
+            const result = await DataService.uploadCsv(csvBuffer);
+
+            expect(result.success).toBe(true);
+            expect(mockKafkaService.publishEvent).toHaveBeenCalledTimes(2);
+
+            const firstPayload = (mockKafkaService.publishEvent as jest.Mock)
+                .mock.calls[0][1][0];
+            const secondPayload = (mockKafkaService.publishEvent as jest.Mock)
+                .mock.calls[1][1][0];
+
+            expect(JSON.parse(firstPayload.value).data).toHaveLength(500);
+            expect(JSON.parse(secondPayload.value).data).toHaveLength(1);
+        });
+
+        it("should skip processing when file hash already exists", async () => {
+            const csvBuffer = Buffer.from(
+                "name,email,city\nJohn Doe,john@test.com,NYC",
+            );
+
+            mockRedisService.get = jest.fn().mockResolvedValue("uploaded");
+
+            const result = await DataService.uploadCsv(csvBuffer);
+
+            expect(result.success).toBe(true);
+            expect(pool.connect).not.toHaveBeenCalled();
+            expect(mockKafkaService.publishEvent).not.toHaveBeenCalled();
         });
 
         it("should handle empty CSV file", async () => {
@@ -61,7 +109,7 @@ describe("DataService", () => {
             const csvBuffer = Buffer.from("name,city\nJohn Doe,NYC");
 
             await expect(DataService.uploadCsv(csvBuffer)).rejects.toThrow(
-                "CSV must contain at least name and email columns"
+                "CSV must contain at least name and email columns",
             );
         });
 
@@ -75,7 +123,7 @@ describe("DataService", () => {
 
         it("should handle database connection errors gracefully", async () => {
             const csvBuffer = Buffer.from(
-                "name,email,city\nJohn Doe,john@test.com,NYC"
+                "name,email,city\nJohn Doe,john@test.com,NYC",
             );
 
             const mockClient = {
@@ -93,7 +141,7 @@ describe("DataService", () => {
 
         it("should handle Kafka publish failures gracefully", async () => {
             const csvBuffer = Buffer.from(
-                "name,email,city\nJohn Doe,john@test.com,NYC"
+                "name,email,city\nJohn Doe,john@test.com,NYC",
             );
 
             const mockClient = {
@@ -102,9 +150,9 @@ describe("DataService", () => {
             };
 
             (pool.connect as jest.Mock).mockResolvedValue(mockClient);
-            mockKafkaService.publishEvent = jest.fn().mockRejectedValue(
-                new Error("Kafka Error")
-            );
+            mockKafkaService.publishEvent = jest
+                .fn()
+                .mockRejectedValue(new Error("Kafka Error"));
 
             // Should not fail the upload just because Kafka failed
             const result = await DataService.uploadCsv(csvBuffer);
@@ -115,7 +163,7 @@ describe("DataService", () => {
 
         it("should handle optional city column", async () => {
             const csvBuffer = Buffer.from(
-                "name,email\nJohn Doe,john@test.com\nJane Smith,jane@test.com"
+                "name,email\nJohn Doe,john@test.com\nJane Smith,jane@test.com",
             );
 
             const mockClient = {
@@ -124,7 +172,9 @@ describe("DataService", () => {
             };
 
             (pool.connect as jest.Mock).mockResolvedValue(mockClient);
-            mockKafkaService.publishEvent = jest.fn().mockResolvedValue(undefined);
+            mockKafkaService.publishEvent = jest
+                .fn()
+                .mockResolvedValue(undefined);
 
             const result = await DataService.uploadCsv(csvBuffer);
 
@@ -134,7 +184,7 @@ describe("DataService", () => {
 
         it("should handle CSV with whitespace and line endings", async () => {
             const csvBuffer = Buffer.from(
-                "name, email, city\r\nJohn Doe, john@test.com, NYC\r\nJane Smith, jane@test.com, LA"
+                "name, email, city\r\nJohn Doe, john@test.com, NYC\r\nJane Smith, jane@test.com, LA",
             );
 
             const mockClient = {
@@ -143,7 +193,9 @@ describe("DataService", () => {
             };
 
             (pool.connect as jest.Mock).mockResolvedValue(mockClient);
-            mockKafkaService.publishEvent = jest.fn().mockResolvedValue(undefined);
+            mockKafkaService.publishEvent = jest
+                .fn()
+                .mockResolvedValue(undefined);
 
             const result = await DataService.uploadCsv(csvBuffer);
 
@@ -152,7 +204,7 @@ describe("DataService", () => {
 
         it("should use ON CONFLICT clause for duplicate emails", async () => {
             const csvBuffer = Buffer.from(
-                "name,email,city\nJohn Doe,john@test.com,NYC"
+                "name,email,city\nJohn Doe,john@test.com,NYC",
             );
 
             const mockClient = {
@@ -161,7 +213,9 @@ describe("DataService", () => {
             };
 
             (pool.connect as jest.Mock).mockResolvedValue(mockClient);
-            mockKafkaService.publishEvent = jest.fn().mockResolvedValue(undefined);
+            mockKafkaService.publishEvent = jest
+                .fn()
+                .mockResolvedValue(undefined);
 
             await DataService.uploadCsv(csvBuffer);
 
@@ -172,41 +226,42 @@ describe("DataService", () => {
 
     describe("fetchData", () => {
         it("should fetch data from cache when available", async () => {
-            const cachedData = {
-                data: [{ id: 1, name: "John", email: "john@test.com", city: "NYC" }],
-                metadata: {
-                    page: 1,
-                    limit: 10,
-                    total: 1,
-                    totalPages: 1,
-                },
-                cached: false,
-            };
+            const cachedData = [
+                { id: 1, name: "John", email: "john@test.com", city: "NYC" },
+                { id: 2, name: "Jane", email: "jane@test.com", city: "LA" },
+            ];
 
             mockRedisService.isConnected = jest.fn().mockResolvedValue(true);
-            mockRedisService.get = jest.fn().mockResolvedValue(JSON.stringify(cachedData));
+            mockRedisService.get = jest
+                .fn()
+                .mockResolvedValue(JSON.stringify(cachedData));
 
             const result = await DataService.fetchData(1, 10);
 
             expect(result.cached).toBe(true);
-            expect(mockRedisService.get).toHaveBeenCalledWith("users:page:1:limit:10");
+            expect(result.data).toHaveLength(2);
+            expect(pool.connect).not.toHaveBeenCalled();
+            expect(mockRedisService.get).toHaveBeenCalledWith("all_users");
         });
 
         it("should fetch data from database when cache is empty", async () => {
             const mockClient = {
-                query: jest
-                    .fn()
-                    .mockResolvedValueOnce({ rows: [{ total: "5" }] }) // Count query
-                    .mockResolvedValueOnce({
-                        rows: [
-                            { id: 1, name: "John", email: "john@test.com", city: "NYC" },
-                        ],
-                    }), // Data query
+                query: jest.fn().mockResolvedValue({
+                    rows: [
+                        {
+                            id: 1,
+                            name: "John",
+                            email: "john@test.com",
+                            city: "NYC",
+                        },
+                    ],
+                }),
                 release: jest.fn(),
             };
 
             (pool.connect as jest.Mock).mockResolvedValue(mockClient);
-            mockRedisService.isConnected = jest.fn().mockResolvedValue(false);
+            mockRedisService.isConnected = jest.fn().mockResolvedValue(true);
+            mockRedisService.get = jest.fn().mockResolvedValue(null);
 
             const result = await DataService.fetchData(1, 10);
 
@@ -214,22 +269,24 @@ describe("DataService", () => {
             expect(result.metadata.page).toBe(1);
             expect(result.metadata.limit).toBe(10);
             expect(result.cached).toBe(false);
+            expect(mockRedisService.set).toHaveBeenCalledWith(
+                "all_users",
+                expect.any(String),
+                3600,
+            );
             expect(mockClient.release).toHaveBeenCalled();
         });
 
         it("should calculate correct pagination metadata", async () => {
+            const users = Array.from({ length: 25 }, (_, i) => ({
+                id: i + 1,
+                name: `User ${i + 1}`,
+                email: `user${i + 1}@test.com`,
+                city: "City",
+            }));
+
             const mockClient = {
-                query: jest
-                    .fn()
-                    .mockResolvedValueOnce({ rows: [{ total: "25" }] })
-                    .mockResolvedValueOnce({
-                        rows: Array.from({ length: 10 }, (_, i) => ({
-                            id: i + 11,
-                            name: `User ${i + 11}`,
-                            email: `user${i + 11}@test.com`,
-                            city: "City",
-                        })),
-                    }),
+                query: jest.fn().mockResolvedValue({ rows: users }),
                 release: jest.fn(),
             };
 
@@ -242,6 +299,7 @@ describe("DataService", () => {
             expect(result.metadata.totalPages).toBe(3);
             expect(result.metadata.page).toBe(2);
             expect(result.metadata.limit).toBe(10);
+            expect(result.data).toHaveLength(10);
         });
 
         it("should handle database errors gracefully", async () => {
@@ -257,38 +315,44 @@ describe("DataService", () => {
             expect(mockClient.release).toHaveBeenCalled();
         });
 
-        it("should fall back to database when Redis connection fails", async () => {
+        it("should throw when Redis checks fail during DB fallback path", async () => {
             const mockClient = {
-                query: jest
-                    .fn()
-                    .mockResolvedValueOnce({ rows: [{ total: "5" }] })
-                    .mockResolvedValueOnce({
-                        rows: [
-                            { id: 1, name: "John", email: "john@test.com", city: "NYC" },
-                        ],
-                    }),
+                query: jest.fn().mockResolvedValue({
+                    rows: [
+                        {
+                            id: 1,
+                            name: "John",
+                            email: "john@test.com",
+                            city: "NYC",
+                        },
+                    ],
+                }),
                 release: jest.fn(),
             };
 
             (pool.connect as jest.Mock).mockResolvedValue(mockClient);
-            mockRedisService.isConnected = jest.fn().mockRejectedValue(new Error("Redis Error"));
+            mockRedisService.isConnected = jest
+                .fn()
+                .mockRejectedValue(new Error("Redis Error"));
 
-            const result = await DataService.fetchData(1, 10);
-
-            expect(result.data).toBeDefined();
-            expect(result.cached).toBe(false);
+            await expect(DataService.fetchData(1, 10)).rejects.toThrow(
+                "Redis Error",
+            );
+            expect(mockClient.release).toHaveBeenCalled();
         });
 
         it("should cache results with 5 minute TTL", async () => {
             const mockClient = {
-                query: jest
-                    .fn()
-                    .mockResolvedValueOnce({ rows: [{ total: "1" }] })
-                    .mockResolvedValueOnce({
-                        rows: [
-                            { id: 1, name: "John", email: "john@test.com", city: "NYC" },
-                        ],
-                    }),
+                query: jest.fn().mockResolvedValue({
+                    rows: [
+                        {
+                            id: 1,
+                            name: "John",
+                            email: "john@test.com",
+                            city: "NYC",
+                        },
+                    ],
+                }),
                 release: jest.fn(),
             };
 
@@ -300,52 +364,60 @@ describe("DataService", () => {
             await DataService.fetchData(1, 10);
 
             expect(mockRedisService.set).toHaveBeenCalledWith(
-                "users:page:1:limit:10",
+                "all_users",
                 expect.any(String),
-                300 // 5 minutes
+                3600,
             );
         });
 
-        it("should handle cache storage failures gracefully", async () => {
+        it("should throw when cache storage fails", async () => {
             const mockClient = {
-                query: jest
-                    .fn()
-                    .mockResolvedValueOnce({ rows: [{ total: "1" }] })
-                    .mockResolvedValueOnce({
-                        rows: [
-                            { id: 1, name: "John", email: "john@test.com", city: "NYC" },
-                        ],
-                    }),
+                query: jest.fn().mockResolvedValue({
+                    rows: [
+                        {
+                            id: 1,
+                            name: "John",
+                            email: "john@test.com",
+                            city: "NYC",
+                        },
+                    ],
+                }),
                 release: jest.fn(),
             };
 
             (pool.connect as jest.Mock).mockResolvedValue(mockClient);
             mockRedisService.isConnected = jest.fn().mockResolvedValue(true);
             mockRedisService.get = jest.fn().mockResolvedValue(null);
-            mockRedisService.set = jest.fn().mockRejectedValue(new Error("Cache Error"));
+            mockRedisService.set = jest
+                .fn()
+                .mockRejectedValue(new Error("Cache Error"));
 
-            const result = await DataService.fetchData(1, 10);
-
-            expect(result.data).toBeDefined();
-            expect(result.cached).toBe(false);
+            await expect(DataService.fetchData(1, 10)).rejects.toThrow(
+                "Cache Error",
+            );
+            expect(mockClient.release).toHaveBeenCalled();
         });
 
-        it("should apply correct offset for pagination", async () => {
+        it("should apply correct slicing for pagination", async () => {
+            const users = Array.from({ length: 30 }, (_, i) => ({
+                id: i + 1,
+                name: `User ${i + 1}`,
+                email: `user${i + 1}@test.com`,
+                city: "City",
+            }));
+
             const mockClient = {
-                query: jest
-                    .fn()
-                    .mockResolvedValueOnce({ rows: [{ total: "100" }] })
-                    .mockResolvedValueOnce({ rows: [] }),
+                query: jest.fn().mockResolvedValue({ rows: users }),
                 release: jest.fn(),
             };
 
             (pool.connect as jest.Mock).mockResolvedValue(mockClient);
             mockRedisService.isConnected = jest.fn().mockResolvedValue(false);
 
-            await DataService.fetchData(3, 10);
+            const result = await DataService.fetchData(3, 10);
 
-            const dataQuery = mockClient.query.mock.calls[1];
-            expect(dataQuery[1]).toEqual([10, 20]); // LIMIT 10 OFFSET 20
+            expect(result.data[0].id).toBe(21);
+            expect(result.data).toHaveLength(10);
         });
     });
 });
