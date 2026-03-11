@@ -1,6 +1,14 @@
-# IS Assignment Backend
+# A backend system with postgres, redis and kafka
 
 This repository contains an Express+TypeScript backend service with Postgres, Redis, Kafka integration. All infrastructure runs locally via Docker Compose.
+
+## Tech Stack
+* Nodejs
+* PostgreSql
+* Redis
+* Kafka
+* Docker
+
 
 ## Prerequisites
 
@@ -15,7 +23,10 @@ This repository contains an Express+TypeScript backend service with Postgres, Re
     cp .env.example .env
     ```
 
-    Edit values if needed (e.g. ports, passwords).
+    Update with your values.
+    Usually if one or more services are runing in the host system, the default port may not work, in that case give different port.
+
+    > Eg: 5433 instead of 5432 as postgres port.
 
 2. **Start infrastructure**
 
@@ -45,24 +56,67 @@ This repository contains an Express+TypeScript backend service with Postgres, Re
     ```
     This is a separate process and also reads `.env`.
 
+6. **Stop docker**
+
+    ```bash
+    docker-compose down
+    ```
+
+
 ## Environment Variables
 
 Configuration is entirely driven by environment variables:
 
-- `DATABASE_URL` – PostgreSQL connection string
-- `REDIS_URL` – Redis connection string
-- `KAFKA_BROKERS` – comma-separated list of Kafka brokers
+- `PG_USER` – PostgreSQL user
+- `PG_PASSWORD` – PostgreSQL password
+- `PG_DB` – PostgreSQL database name
+- `PG_HOST` – PostgreSQL host
+- `PG_PORT` – PostgreSQL port
+
+- `REDIS_HOST` – Redis connection host url without port
+- `REDIS_PORT` – Redis port
+
+- `KAFKA_TOPIC` – Kafka topic for sending upload data event
+- `KAFKA_PORT` – Kafka port
+- `KAFKA_BROKERS_HOST` – host for the kafka broker (we are working with one broker in this sample)
 - `PORT` – port for the Express server
 
-Other variables like `POSTGRES_USER`, etc. are used by Docker Compose.
+
 
 ## API Endpoints
 
 - `POST /data` – upload CSV file (multer `file` field)
 - `GET /data?page=1&limit=10` – fetch paginated entries
 
+## Components
+1. <u>Upload API</u>
+
+
+* Accept a CSV file via a REST endpoint
+* Validate and process the file contents
+* Persist the data into a PostgreSQL database
+* After saving, publish an event to a Kafka topic
+* Return a structured success or error response
+
+
+2. <u>Fetch API</u>
+
+* Expose a REST endpoint to retrieve all records
+* Serve from Redis cache where available
+* Handle cache unavailability gracefully with a fallback strategy
+
+3. <u>Kafka Consumer Service</u>
+* Run as a standalone Node.js process separate from the API
+* Listen to the Kafka topic published by the Upload API
+* On each message, update the Redis cache
+* Handle failures, retries, and duplicate messages
+* Log meaningful output for each event processed
+
 ## Notes
 
 - Kafka events are published on upload and consumed by a standalone service
 - Redis is used for caching and updated by the consumer
 - All configuration defaults are safe for local development
+- No authentication is used for the APIs
+- Tests are added with the help of AI
+
