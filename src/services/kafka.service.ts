@@ -5,9 +5,15 @@ let consumer: Consumer | null = null;
 
 console.log("Initializing KafkaService...");
 
+const kafkaBrokers = process.env.KAFKA_BROKERS
+    ? process.env.KAFKA_BROKERS.split(",").map((broker) => broker.trim())
+    : [
+          `${process.env.KAFKA_BROKERS_HOST || "localhost"}:${process.env.KAFKA_PORT || "9092"}`,
+      ];
+
 const kafka = new Kafka({
     clientId: "is-assignment-app",
-    brokers: (`${process.env.KAFKA_BROKERS_HOST}:${process.env.KAFKA_PORT}`).split(","),
+    brokers: kafkaBrokers,
     logLevel: logLevel.ERROR,
     requestTimeout: 30000,
     connectionTimeout: 30000,

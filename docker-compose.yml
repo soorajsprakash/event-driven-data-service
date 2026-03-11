@@ -18,17 +18,28 @@ services:
         ports:
             - "${REDIS_PORT:-6380}:6379"
 
+    zookeeper:
+        image: bitnamilegacy/zookeeper:3.8
+        restart: unless-stopped
+        environment:
+            - ALLOW_ANONYMOUS_LOGIN=yes
+
     kafka:
         image: bitnamilegacy/kafka:3.3.2
         restart: unless-stopped
         environment:
-            - KAFKA_BROKER_ID=1
-            - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092
-            - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:${KAFKA_PORT},PLAINTEXT_INTERNAL://kafka:9092
-            - KAFKA_ALLOW_PLAINTEXT_LISTENER=yes
-            - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+            - KAFKA_CFG_BROKER_ID=1
+            - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+            - KAFKA_CFG_LISTENERS=PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:29092
+            - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://localhost:${KAFKA_PORT:-9092},PLAINTEXT_INTERNAL://kafka:29092
+            - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+            - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT_INTERNAL
+            - KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+            - ALLOW_PLAINTEXT_LISTENER=yes
         ports:
-            - "${KAFKA_PORT}:9092"
+            - "${KAFKA_PORT:-9092}:9092"
+        depends_on:
+            - zookeeper
 
 volumes:
     pgdata:
