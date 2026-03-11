@@ -7,9 +7,9 @@
     "type": "commonjs",
     "main": "index.js",
     "scripts": {
-        "test": "jest --detectOpenHandles",
-        "test:watch": "jest --watch --detectOpenHandles",
-        "test:coverage": "jest --coverage --detectOpenHandlesf",
+        "test": "jest",
+        "test:watch": "jest --watch",
+        "test:coverage": "jest --coverage",
         "start": "ts-node -r dotenv/config src/app.ts",
         "consumer": "ts-node -r dotenv/config src/kafka-consumer.ts",
         "build": "tsc"

@@ -56,7 +56,14 @@ This repository contains an Express+TypeScript backend service with Postgres, Re
     ```
     This is a separate process and also reads `.env`.
 
-6. **Stop docker**
+6. **Run the tests**
+    ```bash
+    npm run test
+    npm run test:coverage # for coverage report
+    ```
+    This is a separate process and also reads `.env`.
+
+7. **Stop docker**
 
     ```bash
     docker-compose down
