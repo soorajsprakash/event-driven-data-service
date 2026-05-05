@@ -87,13 +87,14 @@ Configuration is entirely driven by environment variables:
 - `KAFKA_PORT` – Kafka port
 - `KAFKA_BROKERS_HOST` – host for the kafka broker (we are working with one broker in this sample)
 - `PORT` – port for the Express server
+- `JWT_SECRET` – secret key used to sign and verify JWT tokens (defaults to `dev-secret` locally)
 
 
 
 ## API Endpoints
 
-- `POST /data` – upload CSV file (multer `file` field)
-- `GET /data?page=1&limit=10` – fetch paginated entries
+- `POST /data` – upload CSV file (multer `file` field; must be `text/csv`, max 5 MB)
+- `GET /data?page=1&limit=10` – fetch paginated entries (requires `Authorization: Bearer <token>`)
 
 ## Components
 1. <u>Upload API</u>
@@ -119,11 +120,65 @@ Configuration is entirely driven by environment variables:
 * Handle failures, retries, and duplicate messages
 * Log meaningful output for each event processed
 
+## Architecture
+
+```mermaid
+flowchart TD
+    Client(["Client"])
+
+    subgraph EXPRESS["Express API Server"]
+        direction TB
+
+        subgraph UPLOAD_PATH["POST /data  —  CSV Upload"]
+            direction TB
+            VM["validateUpload Middleware\nMIME: text/csv  ·  Max 5 MB"]
+            UC["DataApi.uploadDataFile"]
+            UP_SVC["DataService\nParse CSV  ·  Deduplicate rows\nBatch upsert into PostgreSQL\nPublish Kafka events in 500-record chunks"]
+        end
+
+        subgraph FETCH_PATH["GET /data?page=1&limit=10  —  Paginated Fetch"]
+            direction TB
+            AM["authenticateToken Middleware\nJWT Bearer Token"]
+            FC["DataApi.fetchDataFile"]
+            FE_SVC["DataService\nCache-first lookup\nReturns: data · page · limit · total · totalPages\ncache field indicates source"]
+        end
+    end
+
+    PG[("PostgreSQL\nusers  —  id · name · email · city\nUpsert on email conflict")]
+    REDIS[("Redis\nfile:{sha256}  TTL 5 days\nall_users  TTL 1 hour")]
+    KAFKA["Kafka Broker\nTopic: KAFKA_TOPIC\nKey: DATA_UPLOADED\n500-record batches per message"]
+
+    subgraph CONSUMER["Kafka Consumer  (npm run consumer  —  standalone process)"]
+        direction TB
+        KSub["Subscribe to KAFKA_TOPIC"]
+        KDedup["Deduplicate incoming users\nNormalise emails  ·  Merge with cached batch"]
+        KWrite["Update Redis  all_users\nTTL 1 hour"]
+    end
+
+    Client -->|"multipart/form-data  field: file"| VM
+    VM -->|"valid type & size"| UC
+    UC --> UP_SVC
+    UP_SVC -->|"batch upsert"| PG
+    UP_SVC -->|"cache SHA-256 file hash"| REDIS
+    UP_SVC -->|"publish DATA_UPLOADED events"| KAFKA
+
+    Client -->|"Authorization: Bearer &lt;token&gt;"| AM
+    AM -->|"valid JWT"| FC
+    FC --> FE_SVC
+    FE_SVC -->|"cache-first lookup"| REDIS
+    REDIS -. "cache miss  →  fallback" .-> PG
+
+    KAFKA -->|"consume"| KSub
+    KSub --> KDedup
+    KDedup --> KWrite
+    KWrite -->|"write"| REDIS
+```
+
 ## Notes
 
 - Kafka events are published on upload and consumed by a standalone service
 - Redis is used for caching and updated by the consumer
 - All configuration defaults are safe for local development
-- No authentication is used for the APIs
-- Tests are added with the help of AI
+- The fetch endpoint is protected with JWT Bearer token authentication
+- The upload endpoint validates file type and size with Joi before processing
 
